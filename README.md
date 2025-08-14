@@ -1,2 +1,2 @@
 # MarketX (Upbit Style) – PWA
-Vite + React + Tailwind. 실시간(Upbit) 토글, BTC 실세 미러링, 오프라인 캐시.
+Vite + React + Tailwind. 실시간(Upbit) 토글, 자산(포트폴리오) 탭에서 실시간 PnL.
