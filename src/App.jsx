@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { LineChart, Line, ResponsiveContainer, Tooltip, YAxis } from "recharts";
+import { LineChart, Line, ResponsiveContainer, Tooltip, YAxis, XAxis, ReferenceLine } from "recharts";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 function krw(n){ return `₩ ${KRW.format(Math.round(n||0))}`; }
@@ -15,7 +15,7 @@ const PRESETS = [{id:"BTC",name:"비트코인"},{id:"ETH",name:"이더리움"},{
 function makeInitialAssets(btcPrice = 160_000_000) {
   return PRESETS.map((p) => {
     const base = p.id === "BTC" ? btcPrice : p.id === "ETH" ? ETH_BASE : rand(600_000, 80_000_000);
-    const data = randomWalk(40, base, rand(-0.0005, 0.0008), 0.018);
+    const data = randomWalk(200, base, rand(-0.0005, 0.0008), 0.018);
     const last = data[data.length - 1].v; const first = data[0].v; const change = ((last - first) / first) * 100;
     return { id: p.id, name: p.name, price: last, change, volume: Math.floor(rand(2, 200))*1_000_000_000, data, lastPrice: last, starred: ["BTC","ETH"].includes(p.id) };
   });
@@ -71,7 +71,7 @@ function useUpbitRealtime(onPrice, enabled) {
 }
 
 const ChangePill = ({ value }) => { const up = value >= 0; return <span className={`px-2 py-1 rounded-full text-xs font-semibold tabular-nums ${up?"bg-emerald-100 text-emerald-700":"bg-rose-100 text-rose-700"}`}>{up?"+":""}{value.toFixed(2)}%</span>; };
-const Spark = ({ data, up }) => (<div className="w-24 h-8"><ResponsiveContainer width="100%" height="100%"><LineChart data={data} margin={{ top: 3, right: 0, left: 0, bottom: 0 }}><YAxis hide domain={["auto","auto"]} /><Tooltip content={() => null} /><Line type="monotone" dataKey="v" dot={false} stroke={up?"#10b981":"#ef4444"} strokeWidth={1.6} /></LineChart></ResponsiveContainer></div>);
+const Spark = ({ data, up }) => (<div className="w-24 h-8"><ResponsiveContainer width="100%" height="100%"><LineChart data={data.slice(-40)} margin={{ top: 3, right: 0, left: 0, bottom: 0 }}><YAxis hide domain={["auto","auto"]} /><Tooltip content={() => null} /><Line type="monotone" dataKey="v" dot={false} stroke={up?"#10b981":"#ef4444"} strokeWidth={1.6} /></LineChart></ResponsiveContainer></div>);
 const PriceCell = ({ price, prev }) => { const up = price >= prev; return (<motion.div initial={false} animate={{ backgroundColor: up?"rgba(16,185,129,0.12)":"rgba(239,68,68,0.12)" }} transition={{ duration: 0.25 }} className="px-2 py-0.5 rounded-md inline-block"><span className="tabular-nums font-semibold">₩ {KRW.format(price)}</span></motion.div>); };
 const Row = ({ a, onSelect, onStar }) => { const up = a.change >= 0; return (<motion.button onClick={onSelect} whileTap={{ scale: 0.98 }} className="w-full grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 px-3 py-3 rounded-2xl bg-white hover:bg-white border border-gray-200">
   <div className="flex items-center gap-3 text-left">
@@ -92,7 +92,7 @@ function useLocalState(key, initial){
   return [v,setV];
 }
 
-function AssetsTab({assets}){
+function AssetsTab({assets, onOpen}){
   const [cash, setCash] = useLocalState("cash_krw", 5_000_000);
   const [holdings, setHoldings] = useLocalState("holdings", [
     { id:"BTC", name:"비트코인", avg: 100_000_000, qty: 0.3 },
@@ -153,18 +153,18 @@ function AssetsTab({assets}){
         </div>
         <div className="mt-2 grid gap-2">
           {rows.map((r, i)=> (
-            <div key={i} className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-2 px-2 py-2 rounded-xl border">
-              <div>
+            <div key={i} className="grid grid-cols-2 md:grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-3 px-2 py-3 rounded-xl border">
+              <button onClick={()=>onOpen(r.id)} className="col-span-2 md:col-span-1 text-left">
                 <div className="text-sm font-semibold">{r.name} <span className="text-xs text-gray-500">{r.id}</span></div>
                 <div className="text-xs text-gray-500">현재가 {krw(r.price)}</div>
-              </div>
+              </button>
               <div className="text-right">
                 <div className="text-[11px] text-gray-500">평단(₩)</div>
-                <input className="w-24 border rounded-lg px-2 py-1 text-right text-sm" value={r.avg} onChange={(e)=>update(i,{avg:Number(e.target.value||0)})} />
+                <input className="w-28 border rounded-lg px-2 py-1 text-right text-base bg-white text-gray-900" value={r.avg} onChange={(e)=>update(i,{avg:Number(e.target.value||0)})} />
               </div>
               <div className="text-right">
                 <div className="text-[11px] text-gray-500">수량</div>
-                <input className="w-20 border rounded-lg px-2 py-1 text-right text-sm" value={r.qty} onChange={(e)=>update(i,{qty:Number(e.target.value||0)})} />
+                <input className="w-24 border rounded-lg px-2 py-1 text-right text-base bg-white text-gray-900" value={r.qty} onChange={(e)=>update(i,{qty:Number(e.target.value||0)})} />
               </div>
               <div className="text-right">
                 <div className="text-[11px] text-gray-500">매수금</div>
@@ -177,7 +177,10 @@ function AssetsTab({assets}){
               <div className="text-right">
                 <div className="text-[11px] text-gray-500">손익</div>
                 <div className={`text-sm ${changeClass(r.pnl)}`}>{krw(r.pnl)} <span className="text-xs">({r.pnlRate>=0?"+":""}{r.pnlRate.toFixed(2)}%)</span></div>
-                <button onClick={()=>remove(i)} className="mt-1 text-xs text-gray-500 underline">삭제</button>
+                <div className="flex justify-end gap-2 mt-1">
+                  <button onClick={()=>onOpen(r.id)} className="text-xs px-2 py-1 rounded-lg bg-gray-100">차트</button>
+                  <button onClick={()=>remove(i)} className="text-xs text-gray-500 underline">삭제</button>
+                </div>
               </div>
             </div>
           ))}
@@ -187,10 +190,62 @@ function AssetsTab({assets}){
   );
 }
 
+function useAvgFor(assetId){
+  try {
+    const list = JSON.parse(localStorage.getItem("holdings"))||[];
+    const item = list.find(x=>x.id===assetId);
+    if(item && typeof item.avg === "number") return item.avg;
+  } catch {}
+  return null;
+}
+
+function ChartSheet({asset, onClose}){
+  const [range, setRange] = useState(60); // 최근 n 포인트
+  const up = asset.change >= 0;
+  const data = useMemo(()=> asset.data.slice(-range).map((p,idx)=>({x: idx, v: p.v})), [asset, range]);
+  const avg = useAvgFor(asset.id);
+
+  return (
+    <div className="fixed inset-0 z-[60]">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl p-4 border-t">
+        <div className="flex items-center justify-between">
+          <div className="text-lg font-bold">{asset.name} <span className="text-xs text-gray-500">{asset.id}</span></div>
+          <button onClick={onClose} className="px-3 py-1 rounded-lg bg-gray-100">닫기</button>
+        </div>
+        <div className="mt-1 flex items-center gap-3">
+          <div className="text-xl font-extrabold">₩ {KRW.format(asset.price)}</div>
+          <span className={`text-sm ${up?'text-emerald-600':'text-rose-600'}`}>{up?'+':''}{asset.change.toFixed(2)}%</span>
+        </div>
+        <div className="mt-1 text-xs text-gray-500">
+          {avg ? <>평단: <b>{krw(avg)}</b> (차트에 보라색 점선)</> : <>자산 탭에서 해당 코인의 <b>평단</b>을 입력하면 여기 차트에 선으로 표시됩니다.</>}
+        </div>
+        <div className="mt-2 flex gap-2 text-xs">
+          {[30,60,120,200].map(n=>(
+            <button key={n} onClick={()=>setRange(n)} className={`px-2 py-1 rounded-lg border ${range===n?'bg-black text-white':'bg-white'}`}>{n}틱</button>
+          ))}
+        </div>
+        <div className="mt-2 w-full h-56">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+              <XAxis dataKey="x" hide />
+              <YAxis hide domain={["auto","auto"]} />
+              <Tooltip formatter={(v)=>[`₩ ${KRW.format(v)}`, "가격"]} />
+              <Line type="monotone" dataKey="v" dot={false} stroke={up?"#10b981":"#ef4444"} strokeWidth={2} />
+              {avg ? <ReferenceLine y={avg} stroke="#6366f1" strokeDasharray="6 6" ifOverflow="extendDomain" label={{ value:`평단 ${KRW.format(avg)}`, position:"right", fill:"#6366f1", fontSize:12 }} /> : null}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [assets, setAssets] = useState(() => { let last = 160_000_000; try { const v = Number(localStorage.getItem('btc_last_live')); if (!Number.isNaN(v) && v>0) last = v; } catch {} return makeInitialAssets(last); });
   const [query, setQuery] = useState(""); const [sort, setSort] = useState("popular"); const [tab, setTab] = useState("assets"); const [live, setLive] = useState(true);
-  const handleLivePrice = (id, price) => { setAssets((old) => old.map((a) => { if (a.id !== id) return a; const prev = a.price; const point = { i: (a.data[a.data.length - 1]?.i ?? 0) + 1, v: price }; const data = [...a.data.slice(-39), point]; const first = data[0].v; const change = ((price - first) / first) * 100; return { ...a, price, data, change, lastPrice: prev }; })); };
+  const [selected, setSelected] = useState(null);
+  const handleLivePrice = (id, price) => { setAssets((old) => old.map((a) => { if (a.id !== id) return a; const prev = a.price; const point = { i: (a.data[a.data.length - 1]?.i ?? 0) + 1, v: price }; const data = [...a.data.slice(-199), point]; const first = data[0].v; const change = ((price - first) / first) * 100; return { ...a, price, data, change, lastPrice: prev }; })); };
   useUpbitRealtime(handleLivePrice, live);
   const list = useMemo(() => {
     let arr = assets; if (query.trim()) { const q = query.trim().toLowerCase(); arr = arr.filter((a)=>a.name.toLowerCase().includes(q)||a.id.toLowerCase().includes(q)); }
@@ -199,6 +254,8 @@ export default function App() {
     return [...sortBy(favs), ...sortBy(rest)];
   }, [assets, query, sort]);
   const toggleStar = (id) => setAssets((old) => old.map((a) => (a.id === id ? { ...a, starred: !a.starred } : a)));
+
+  const openById = (id)=>{ const a = assets.find(x=>x.id===id); if(a) setSelected(a); };
 
   return (
     <div className="min-h-[100dvh] w-full grid place-items-center bg-gradient-to-b from-gray-50 to-white text-gray-900">
@@ -230,13 +287,15 @@ export default function App() {
         {tab==='market' ? (
           <div className="p-3 grid gap-2">
             <AnimatePresence initial={false}>
-              {list.map((a) => (<Row key={a.id} a={a} onSelect={()=>{}} onStar={()=>toggleStar(a.id)} />))}
+              {list.map((a) => (<Row key={a.id} a={a} onSelect={()=>setSelected(a)} onStar={()=>toggleStar(a.id)} />))}
             </AnimatePresence>
           </div>
         ) : (
-          <AssetsTab assets={assets} />
+          <AssetsTab assets={assets} onOpen={openById} />
         )}
       </div>
+
+      {selected && <ChartSheet asset={selected} onClose={()=>setSelected(null)} />}
     </div>
   );
 }
